@@ -52,14 +52,14 @@ const osThreadAttr_t defaultTask_attributes = {
 };
 /* USER CODE BEGIN PV */
 osThreadId_t uart3TaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
+const osThreadAttr_t uart3Task_attributes = {
   .name = "uart3",
   .stack_size = 128*4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
 osThreadId_t uart2TaskHandle;
-const osThreadAttr_t defaultTask_attributes = {
+const osThreadAttr_t uart2Task_attributes = {
   .name = "uart2",
   .stack_size = 128*4,
   .priority = (osPriority_t) osPriorityNormal,
@@ -76,7 +76,7 @@ void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
 void uart3Task(void *argument);
-void uart3Task(void *argument);
+void uart2Task(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -140,6 +140,8 @@ int main(void)
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  uart3TaskHandle = osThreadNew(uart3Task, NULL, &uart3Task_attributes);
+  uart2TaskHandle = osThreadNew(uart2Task, NULL, &uart2Task_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -320,12 +322,16 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
+	uint8_t msg[] = "default task is running\n";
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
-  for(;;)
-  {
-    osDelay(1);
-  }
+	for(;;)
+	{
+		/* timeout in ms. HAL ticks updates
+		   in systick handler together with RTOS routine */
+		HAL_UART_Transmit(&huart3, msg, sizeof(msg)-1, 10);
+		osDelay(500);
+	}
   /* USER CODE END 5 */
 }
 
@@ -333,20 +339,26 @@ void StartDefaultTask(void *argument)
 
 void uart3Task(void *argument)
 {
-
-  for(;;)
-  {
-    osDelay(1);
-  }
+	uint8_t msg[] = "uart3Task is running\n";
+	for(;;)
+	{
+		/* timeout in ms. HAL ticks updates
+		   in systick handler together with RTOS routine */
+		HAL_UART_Transmit(&huart3, msg, sizeof(msg)-1, 10);
+		osDelay(500);
+	}
 }
 
 void uart2Task(void *argument)
 {
-
-  for(;;)
-  {
-    osDelay(1);
-  }
+	uint8_t msg[] = "uart2Task is running\n";
+	for(;;)
+	{
+		/* timeout in ms. HAL ticks updates
+		   in systick handler together with RTOS routine */
+		HAL_UART_Transmit(&huart3, msg, sizeof(msg)-1, 10);
+		osDelay(500);
+	}
 }
 
 
