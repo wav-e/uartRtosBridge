@@ -303,7 +303,7 @@ static void MX_GPIO_Init(void)
 
 /* this function will be called on success receive 1 byte  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
-	uint8_t data = huart->pRxBuffPtr;
+	uint8_t data = *huart->pRxBuffPtr;
 
 	// TODO: add received data to queue_isr
 	;
@@ -329,8 +329,8 @@ void StartDefaultTask(void *argument)
 	{
 		/* timeout in ms. HAL ticks updates
 		   in systick handler together with RTOS routine */
-		HAL_UART_Transmit(&huart3, msg, sizeof(msg)-1, 10);
-		osDelay(500);
+		HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
+		osDelay(498);
 	}
   /* USER CODE END 5 */
 }
@@ -344,8 +344,8 @@ void uart3Task(void *argument)
 	{
 		/* timeout in ms. HAL ticks updates
 		   in systick handler together with RTOS routine */
-		HAL_UART_Transmit(&huart3, msg, sizeof(msg)-1, 10);
-		osDelay(500);
+		HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
+		osDelay(499);
 	}
 }
 
@@ -356,7 +356,7 @@ void uart2Task(void *argument)
 	{
 		/* timeout in ms. HAL ticks updates
 		   in systick handler together with RTOS routine */
-		HAL_UART_Transmit(&huart3, msg, sizeof(msg)-1, 10);
+		HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
 		osDelay(500);
 	}
 }
