@@ -1,4 +1,3 @@
-/* USER CODE BEGIN Header */
 /**
   ******************************************************************************
   * @file           : main.c
@@ -15,74 +14,51 @@
   *
   ******************************************************************************
   */
-/* USER CODE END Header */
-/* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
 
-/* Private includes ----------------------------------------------------------*/
-/* USER CODE BEGIN Includes */
 
-/* USER CODE END Includes */
-
-/* Private typedef -----------------------------------------------------------*/
-/* USER CODE BEGIN PTD */
-
-/* USER CODE END PTD */
-
-/* Private define ------------------------------------------------------------*/
-/* USER CODE BEGIN PD */
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
-/* Definitions for defaultTask */
+/*--------------- Definitions for RTOS objects--------------------------------*/
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
   .stack_size = 128 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* USER CODE BEGIN PV */
+
 osThreadId_t uart3TaskHandle;
 const osThreadAttr_t uart3Task_attributes = {
-  .name = "uart3",
+  .name = "uart3tsk",
   .stack_size = 128*4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
 osThreadId_t uart2TaskHandle;
 const osThreadAttr_t uart2Task_attributes = {
-  .name = "uart2",
+  .name = "uart2tsk",
   .stack_size = 128*4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-/* USER CODE END PV */
 
-/* Private function prototypes -----------------------------------------------*/
+/* tasks prototypes */
+void StartDefaultTask(void *argument);
+void uart3Task(void *argument);
+void uart2Task(void *argument);
+
+/* queues */
+osMessageQueueId_t qTxUart3;
+osMessageQueueId_t qRxUart3;
+
+
+/*----------------------- init prototypes ------------------------------------*/
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_USART2_UART_Init(void);
 static void MX_USART3_UART_Init(void);
-void StartDefaultTask(void *argument);
 
-
-/* USER CODE BEGIN PFP */
-void uart3Task(void *argument);
-void uart2Task(void *argument);
-/* USER CODE END PFP */
-
-/* Private user code ---------------------------------------------------------*/
-/* USER CODE BEGIN 0 */
-
-/* USER CODE END 0 */
 
 /**
   * @brief  The application entry point.
@@ -90,80 +66,36 @@ void uart2Task(void *argument);
   */
 int main(void)
 {
-  /* USER CODE BEGIN 1 */
-
-  /* USER CODE END 1 */
-
-  /* MCU Configuration--------------------------------------------------------*/
-
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
+  /* Reset of all peripherals, Initializes the Flash interface and the Systick*/
   HAL_Init();
-
-  /* USER CODE BEGIN Init */
-
-  /* USER CODE END Init */
 
   /* Configure the system clock */
   SystemClock_Config();
-
-  /* USER CODE BEGIN SysInit */
-
-  /* USER CODE END SysInit */
 
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
   MX_USART3_UART_Init();
-  /* USER CODE BEGIN 2 */
 
-  /* USER CODE END 2 */
-
-  /* Init scheduler */
   osKernelInitialize();
 
-  /* USER CODE BEGIN RTOS_MUTEX */
-  /* add mutexes, ... */
-  /* USER CODE END RTOS_MUTEX */
+  qTxUart3 = osMessageQueueNew(10, 1, NULL);
+  qRxUart3 = osMessageQueueNew(10, 1, NULL);
 
-  /* USER CODE BEGIN RTOS_SEMAPHORES */
-  /* add semaphores, ... */
-  /* USER CODE END RTOS_SEMAPHORES */
-
-  /* USER CODE BEGIN RTOS_TIMERS */
-  /* start timers, add new ones, ... */
-  /* USER CODE END RTOS_TIMERS */
-
-  /* USER CODE BEGIN RTOS_QUEUES */
-  /* add queues, ... */
-  /* USER CODE END RTOS_QUEUES */
-
-  /* Create the thread(s) */
-  /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
   uart3TaskHandle = osThreadNew(uart3Task, NULL, &uart3Task_attributes);
   uart2TaskHandle = osThreadNew(uart2Task, NULL, &uart2Task_attributes);
 
-  /* USER CODE BEGIN RTOS_THREADS */
-  /* add threads, ... */
-  /* USER CODE END RTOS_THREADS */
-
-  /* USER CODE BEGIN RTOS_EVENTS */
-  /* add events, ... */
-  /* USER CODE END RTOS_EVENTS */
 
   /* Start scheduler */
   osKernelStart();
 
-  /* We should never get here as control is now taken by the scheduler */
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
+
   while (1)
   {
-    /* USER CODE END WHILE */
-
-    /* USER CODE BEGIN 3 */
+	  ;
   }
-  /* USER CODE END 3 */
+
 }
 
 /**
@@ -213,13 +145,6 @@ void SystemClock_Config(void)
 static void MX_USART2_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART2_Init 0 */
-
-  /* USER CODE END USART2_Init 0 */
-
-  /* USER CODE BEGIN USART2_Init 1 */
-
-  /* USER CODE END USART2_Init 1 */
   huart2.Instance = USART2;
   huart2.Init.BaudRate = 115200;
   huart2.Init.WordLength = UART_WORDLENGTH_8B;
@@ -232,9 +157,6 @@ static void MX_USART2_UART_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART2_Init 2 */
-
-  /* USER CODE END USART2_Init 2 */
 
 }
 
@@ -246,13 +168,6 @@ static void MX_USART2_UART_Init(void)
 static void MX_USART3_UART_Init(void)
 {
 
-  /* USER CODE BEGIN USART3_Init 0 */
-
-  /* USER CODE END USART3_Init 0 */
-
-  /* USER CODE BEGIN USART3_Init 1 */
-
-  /* USER CODE END USART3_Init 1 */
   huart3.Instance = USART3;
   huart3.Init.BaudRate = 115200;
   huart3.Init.WordLength = UART_WORDLENGTH_8B;
@@ -265,9 +180,6 @@ static void MX_USART3_UART_Init(void)
   {
     Error_Handler();
   }
-  /* USER CODE BEGIN USART3_Init 2 */
-
-  /* USER CODE END USART3_Init 2 */
 
 }
 
@@ -298,41 +210,45 @@ static void MX_GPIO_Init(void)
 
 }
 
-/* USER CODE BEGIN 4 */
-
 
 /* this function will be called on success receive 1 byte  */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
-	uint8_t data = *huart->pRxBuffPtr;
+	/* TODO: it seems like hardcode. May be other way exists to get
+	 * last byte data in UART. I need to get uart data. I get it
+	 * by decrementing data ptr in huart instance; This code should be
+	 * safe, because HAL_UART_RxCpltCallback() calls only in ISR  */
+	uint8_t data = *(huart->pRxBuffPtr-1);
 
 	// TODO: add received data to queue_isr
-	;
+	osMessageQueuePut(qRxUart3, &data,0,0) ;
 
-	//prepare to receiving new byte of data
+	//debug led blink
+	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
+
+
+	/* prepare to receiving new byte of data, It enables uart interrupts,
+	and wait for 1 byte (call HAL_UART_RxCpltCallback() in next ISR)   */
 	HAL_UART_Receive_IT(huart, &data, 1);
 }
-/* USER CODE END 4 */
 
-/* USER CODE BEGIN Header_StartDefaultTask */
+
 /**
   * @brief  Function implementing the defaultTask thread.
   * @param  argument: Not used
   * @retval None
   */
-/* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
 	uint8_t msg[] = "default task is running\n";
-  /* USER CODE BEGIN 5 */
   /* Infinite loop */
 	for(;;)
 	{
+
 		/* timeout in ms. HAL ticks updates
 		   in systick handler together with RTOS routine */
-		HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
+		//HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
 		osDelay(498);
 	}
-  /* USER CODE END 5 */
 }
 
 
@@ -340,23 +256,31 @@ void StartDefaultTask(void *argument)
 void uart3Task(void *argument)
 {
 	uint8_t msg[] = "uart3Task is running\n";
+	uint8_t data;
+	HAL_UART_Receive_IT(&huart3, &data, 1);
+	//UART_Start_Receive_IT(&huart3, &data, 1);
+	//HAL_UARTEx_ReceiveToIdle_IT(&huart3, &data, 1);
 	for(;;)
 	{
+
+		osMessageQueueGet(qRxUart3, &data, 0, portMAX_DELAY);
+		HAL_UART_Transmit_IT(&huart3, &data, 1);
 		/* timeout in ms. HAL ticks updates
 		   in systick handler together with RTOS routine */
-		HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
-		osDelay(499);
+		//HAL_UART_Transmit_IT(&huart3, &data, 1);
+		//osDelay(500);
 	}
 }
 
 void uart2Task(void *argument)
 {
-	uint8_t msg[] = "uart2Task is running\n";
+	//uint8_t msg[] = "uart2Task is running\n";
 	for(;;)
 	{
+
 		/* timeout in ms. HAL ticks updates
 		   in systick handler together with RTOS routine */
-		HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
+		//HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
 		osDelay(500);
 	}
 }
@@ -368,13 +292,12 @@ void uart2Task(void *argument)
   */
 void Error_Handler(void)
 {
-  /* USER CODE BEGIN Error_Handler_Debug */
   /* User can add his own implementation to report the HAL error return state */
   __disable_irq();
   while (1)
   {
+	  ;
   }
-  /* USER CODE END Error_Handler_Debug */
 }
 
 #ifdef  USE_FULL_ASSERT
@@ -387,9 +310,7 @@ void Error_Handler(void)
   */
 void assert_failed(uint8_t *file, uint32_t line)
 {
-  /* USER CODE BEGIN 6 */
   /* User can add his own implementation to report the file name and line number,
      ex: printf("Wrong parameters value: file %s on line %d\r\n", file, line) */
-  /* USER CODE END 6 */
 }
 #endif /* USE_FULL_ASSERT */
