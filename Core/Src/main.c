@@ -54,14 +54,14 @@ const osThreadAttr_t defaultTask_attributes = {
 osThreadId_t uart3TaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "uart3",
-  .stack_size = 128,
+  .stack_size = 128*4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 
 osThreadId_t uart2TaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "uart2",
-  .stack_size = 128,
+  .stack_size = 128*4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* USER CODE END PV */
