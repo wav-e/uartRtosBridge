@@ -88,8 +88,8 @@ int main(void) {
 	osKernelInitialize();
 
 	//Init tx semaphores
-	semUart2tx = osSemaphoreNew(1,1,NULL);
-	semUart3tx = osSemaphoreNew(1,1,NULL);
+	semUart2tx = osSemaphoreNew(1,0,NULL);
+	semUart3tx = osSemaphoreNew(1,0,NULL);
 
 	//init queues capacity=QUEUE_MAX_SIZE, size of element = 1or2 byte;
 	qRxUart2 = osMessageQueueNew(QUEUE_MAX_SIZE, sizeof(data_t), NULL);
