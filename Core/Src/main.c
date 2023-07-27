@@ -21,6 +21,9 @@
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
 
+
+typedef uint8_t data_t;
+
 /*--------------- Definitions for RTOS objects--------------------------------*/
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
@@ -44,13 +47,13 @@ const osThreadAttr_t uart2Task_attributes = {
 };
 
 /* tasks prototypes */
-void StartDefaultTask(void *argument);
-void uart3Task(void *argument);
-void uart2Task(void *argument);
+void uartTask(void *argument);
+void StartDefaultTask(void *param);
 
 /* queues */
-osMessageQueueId_t qTxUart3;
 osMessageQueueId_t qRxUart3;
+osMessageQueueId_t qRxUart2;
+#define QUEUE_MAX_SIZE 10
 
 
 /*----------------------- init prototypes ------------------------------------*/
@@ -79,20 +82,22 @@ int main(void)
 
   osKernelInitialize();
 
-  qTxUart3 = osMessageQueueNew(10, 1, NULL);
-  qRxUart3 = osMessageQueueNew(10, 1, NULL);
+  //init queues capacity=QUEUE_MAX_SIZE, size of element = 1or2 byte;
+
+  qRxUart2 = osMessageQueueNew(QUEUE_MAX_SIZE, sizeof(data_t), NULL);
+  qRxUart3 = osMessageQueueNew(QUEUE_MAX_SIZE, sizeof(data_t), NULL);
 
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
-  uart3TaskHandle = osThreadNew(uart3Task, NULL, &uart3Task_attributes);
-  uart2TaskHandle = osThreadNew(uart2Task, NULL, &uart2Task_attributes);
+
+  //uart3TaskHandle = osThreadNew(uartTask, (void*) 3, &uart3Task_attributes);
+  //uart2TaskHandle = osThreadNew(uartTask, (void*) 2, &uart2Task_attributes);
 
 
   /* Start scheduler */
   osKernelStart();
 
 
-  while (1)
-  {
+  while (1) {
 	  ;
   }
 
@@ -147,7 +152,7 @@ static void MX_USART2_UART_Init(void)
 
   huart2.Instance = USART2;
   huart2.Init.BaudRate = 115200;
-  huart2.Init.WordLength = UART_WORDLENGTH_8B;
+  huart2.Init.WordLength = (sizeof(data_t)==2)? UART_WORDLENGTH_9B : UART_WORDLENGTH_8B;
   huart2.Init.StopBits = UART_STOPBITS_1;
   huart2.Init.Parity = UART_PARITY_NONE;
   huart2.Init.Mode = UART_MODE_TX_RX;
@@ -170,7 +175,7 @@ static void MX_USART3_UART_Init(void)
 
   huart3.Instance = USART3;
   huart3.Init.BaudRate = 115200;
-  huart3.Init.WordLength = UART_WORDLENGTH_8B;
+  huart3.Init.WordLength = (sizeof(data_t)==2)? UART_WORDLENGTH_9B : UART_WORDLENGTH_8B;
   huart3.Init.StopBits = UART_STOPBITS_1;
   huart3.Init.Parity = UART_PARITY_NONE;
   huart3.Init.Mode = UART_MODE_TX_RX;
@@ -211,25 +216,85 @@ static void MX_GPIO_Init(void)
 }
 
 
-/* this function will be called on success receive 1 byte  */
+/** It will be called in the end of UART ISR, after receiving 1 byte */
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	/* TODO: it seems like hardcode. May be other way exists to get
 	 * last byte data in UART. I need to get uart data. I get it
 	 * by decrementing data ptr in huart instance; This code should be
 	 * safe, because HAL_UART_RxCpltCallback() calls only in ISR  */
-	uint8_t data = *(huart->pRxBuffPtr-1);
 
-	// TODO: add received data to queue_isr
-	osMessageQueuePut(qRxUart3, &data,0,0) ;
+	//TODO: 9 byte transfer support
+	data_t data = *(huart->pRxBuffPtr-1);
+	osMessageQueueId_t qHandle;
+
+	if (huart->Instance == USART3) {
+		qHandle = qRxUart3;
+	}
+	else if  (huart->Instance == USART2) {
+		qHandle = qRxUart2;
+	}
+	else {
+		Error_Handler();
+	}
+	if (huart->Instance == USART3)
+		osMessageQueuePut(qHandle, &data,0,0);
 
 	//debug led blink
 	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
 
-
-	/* prepare to receiving new byte of data, It enables uart interrupts,
-	and wait for 1 byte (call HAL_UART_RxCpltCallback() in next ISR)   */
+	/* prepare to receiving new byte of data, HAL_UART_Receive_IT enables uart
+	interrupts, and waits for 1 byte (wait for call HAL_UART_RxCpltCallback()
+	in next ISR) */
 	HAL_UART_Receive_IT(huart, &data, 1);
 }
+
+/** It will be called in the end of UART ISR, after transmitting 1 byte */
+void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
+	osMessageQueueId_t qHandle;
+
+	// TODO: optimize it!!!
+	static data_t data[QUEUE_MAX_SIZE]; //copy data from queue to this array for TX
+
+	uint32_t size;
+
+	if (huart->Instance == USART3) {
+		qHandle = qRxUart2;
+	}
+	else if  (huart->Instance == USART2) {
+		qHandle = qRxUart3;
+	}
+	else {
+		Error_Handler();
+	}
+
+	size = osMessageQueueGetCount(qHandle);
+
+	for (int i=0; i<size; i++) {
+		osMessageQueuePut(qHandle, &data[i],0,0);
+	}
+
+
+	/* In this callback an old transmission was
+	 * completed yet, so we can start a new
+	 * transmission. HAL_UART_Transmit_IT() checks
+	 * for size and just will return if size==0  */
+	HAL_UART_Transmit_IT(huart, &data, size);
+}
+
+
+void StartDefaultTask(void *param) {
+	uint8_t msg3[] = "UART 3 sent it\n";
+	uint8_t msg2[] = "UART 2 sent it\n";
+
+
+	for(;;){
+		HAL_UART_Transmit_IT(&huart3, msg3, sizeof(msg3)-1);
+		HAL_UART_Transmit_IT(&huart2, msg2, sizeof(msg2)-1);
+		osDelay(500);
+	}
+}
+
+
 
 
 /**
@@ -237,53 +302,51 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
   * @param  argument: Not used
   * @retval None
   */
-void StartDefaultTask(void *argument)
-{
-	uint8_t msg[] = "default task is running\n";
-  /* Infinite loop */
-	for(;;)
-	{
-
-		/* timeout in ms. HAL ticks updates
-		   in systick handler together with RTOS routine */
-		//HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
-		osDelay(498);
-	}
-}
-
-
-
-void uart3Task(void *argument)
+void uartTask(void *u8_uartNum)
 {
 	uint8_t msg[] = "uart3Task is running\n";
-	uint8_t data;
-	HAL_UART_Receive_IT(&huart3, &data, 1);
-	//UART_Start_Receive_IT(&huart3, &data, 1);
-	//HAL_UARTEx_ReceiveToIdle_IT(&huart3, &data, 1);
+	data_t data;
+	UART_HandleTypeDef *pHuartRX;
+	UART_HandleTypeDef *pHuartTX;
+	osMessageQueueId_t queueRX;
+	//osMessageQueueId_t qHandleTX;
+
+	if ((uint8_t)u8_uartNum == 2) {
+		pHuartRX = &huart2;
+		queueRX = qRxUart2;
+
+		pHuartTX = &huart3;
+		//qHandleTX = qRxUart3;
+
+	}
+	else if ((uint8_t)u8_uartNum == 3)
+	{
+		pHuartRX = &huart3;
+		queueRX = qRxUart3;
+
+		pHuartTX = &huart2;
+		//qHandleTX = qRxUart2;
+	}
+	else {
+		Error_Handler();
+	}
+
+	/* Initializes receive data. It enables IRQ. When a byte received, ISR
+	callback will puts it to queue, and calls HAL_UART_Receive_IT() again */
+	HAL_UART_Receive_IT(pHuartRX, &data, 1);
 	for(;;)
 	{
+		/* The thread will blocked while queue is empty */
+		osMessageQueueGet(queueRX, &data, 0, portMAX_DELAY);
 
-		osMessageQueueGet(qRxUart3, &data, 0, portMAX_DELAY);
-		HAL_UART_Transmit_IT(&huart3, &data, 1);
-		/* timeout in ms. HAL ticks updates
-		   in systick handler together with RTOS routine */
-		//HAL_UART_Transmit_IT(&huart3, &data, 1);
-		//osDelay(500);
+		/* the thread unblocked and puts a byte to transfer */
+		// TODO: we need a semaphore if data transfers from ISR
+		HAL_UART_Transmit_IT(pHuartTX, &data, 1);
+
+		/* ISR will continue transfer */
 	}
 }
 
-void uart2Task(void *argument)
-{
-	//uint8_t msg[] = "uart2Task is running\n";
-	for(;;)
-	{
-
-		/* timeout in ms. HAL ticks updates
-		   in systick handler together with RTOS routine */
-		//HAL_UART_Transmit_IT(&huart3, msg, sizeof(msg)-1);
-		osDelay(500);
-	}
-}
 
 
 /**
