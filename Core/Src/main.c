@@ -318,6 +318,9 @@ void uartTask(void *u8_uartNum)
 {
 	uint8_t msg[] = "uart3Task is running\n";
 	data_t data;
+	data_t data_arr[QUEUE_MAX_SIZE];
+	uint32_t size;
+
 	UART_HandleTypeDef 	*pHuartRX;
 	UART_HandleTypeDef 	*pHuartTX;
 	osMessageQueueId_t 	queueRX;
@@ -348,12 +351,20 @@ void uartTask(void *u8_uartNum)
 	for(;;)
 	{
 		/* The thread will blocked while queue is empty */
-		osMessageQueueGet(queueRX, &data, 0, portMAX_DELAY);
+		osMessageQueueGet(queueRX, &data_arr[0], 0, portMAX_DELAY);
 
 		/* the thread unblocked and puts a byte to transfer */
 		// TODO: we need a semaphore if data transfers from ISR
-		osSemaphoreAcquire(sem, portMAX_DELAY);
-		HAL_UART_Transmit_IT(pHuartTX, &data, 1);
+		//osSemaphoreAcquire(sem, portMAX_DELAY);
+		size = 1;
+		size += osMessageQueueGetCount(queueRX);
+		for (int i=1; i<size; i++) {
+			osMessageQueueGet(queueRX, &data_arr[i],0,0);
+		}
+
+
+
+		HAL_UART_Transmit_IT(pHuartTX, data_arr, size);
 
 		/* ISR will continue transfer */
 	}
