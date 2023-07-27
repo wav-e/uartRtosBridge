@@ -53,7 +53,7 @@ void StartDefaultTask(void *param);
 /* queues */
 osMessageQueueId_t qRxUart3;
 osMessageQueueId_t qRxUart2;
-#define QUEUE_MAX_SIZE 10
+#define QUEUE_MAX_SIZE 128
 
 osSemaphoreId_t semUart3;
 osSemaphoreId_t semUart2;
