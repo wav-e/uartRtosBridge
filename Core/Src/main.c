@@ -55,6 +55,11 @@ osMessageQueueId_t qRxUart3;
 osMessageQueueId_t qRxUart2;
 #define QUEUE_MAX_SIZE 10
 
+osSemaphoreId_t semUart3;
+osSemaphoreId_t semUart2;
+
+
+
 
 /*----------------------- init prototypes ------------------------------------*/
 void SystemClock_Config(void);
@@ -83,14 +88,15 @@ int main(void)
   osKernelInitialize();
 
   //init queues capacity=QUEUE_MAX_SIZE, size of element = 1or2 byte;
-
+  semUart2 = osSemaphoreNew(1,1,NULL);
+  semUart3 = osSemaphoreNew(1,1,NULL);
   qRxUart2 = osMessageQueueNew(QUEUE_MAX_SIZE, sizeof(data_t), NULL);
   qRxUart3 = osMessageQueueNew(QUEUE_MAX_SIZE, sizeof(data_t), NULL);
 
-  defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
+  //defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
-  //uart3TaskHandle = osThreadNew(uartTask, (void*) 3, &uart3Task_attributes);
-  //uart2TaskHandle = osThreadNew(uartTask, (void*) 2, &uart2Task_attributes);
+  uart3TaskHandle = osThreadNew(uartTask, (void*) 3, &uart3Task_attributes);
+  uart2TaskHandle = osThreadNew(uartTask, (void*) 2, &uart2Task_attributes);
 
 
   /* Start scheduler */
@@ -236,8 +242,9 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	else {
 		Error_Handler();
 	}
-	if (huart->Instance == USART3)
-		osMessageQueuePut(qHandle, &data,0,0);
+
+
+	osMessageQueuePut(qHandle, &data,0,0);
 
 	//debug led blink
 	HAL_GPIO_TogglePin(LED_GPIO_Port, LED_Pin);
@@ -250,7 +257,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 
 /** It will be called in the end of UART ISR, after transmitting 1 byte */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
-	osMessageQueueId_t qHandle;
+	osMessageQueueId_t 	qHandle;
+	osSemaphoreId_t 	sem;
 
 	// TODO: optimize it!!!
 	static data_t data[QUEUE_MAX_SIZE]; //copy data from queue to this array for TX
@@ -259,26 +267,30 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
 
 	if (huart->Instance == USART3) {
 		qHandle = qRxUart2;
+		sem = semUart3;
 	}
 	else if  (huart->Instance == USART2) {
 		qHandle = qRxUart3;
+		sem = semUart2;
 	}
 	else {
 		Error_Handler();
 	}
 
-	size = osMessageQueueGetCount(qHandle);
-
-	for (int i=0; i<size; i++) {
-		osMessageQueuePut(qHandle, &data[i],0,0);
-	}
-
-
-	/* In this callback an old transmission was
-	 * completed yet, so we can start a new
-	 * transmission. HAL_UART_Transmit_IT() checks
-	 * for size and just will return if size==0  */
-	HAL_UART_Transmit_IT(huart, &data, size);
+//	size = osMessageQueueGetCount(qHandle);
+//
+//	for (int i=0; i<size; i++) {
+//		osMessageQueuePut(qHandle, &data[i],0,0);
+//	}
+//
+//
+//	/* In this callback an old transmission was
+//	 * completed yet, so we can start a new
+//	 * transmission. HAL_UART_Transmit_IT() checks
+//	 * for size and just will return if size==0  */
+//	HAL_UART_Transmit_IT(huart, &data, size);
+//	if (huart->gState == HAL_UART_STATE_READY)
+		osSemaphoreRelease(sem);
 }
 
 
@@ -306,26 +318,25 @@ void uartTask(void *u8_uartNum)
 {
 	uint8_t msg[] = "uart3Task is running\n";
 	data_t data;
-	UART_HandleTypeDef *pHuartRX;
-	UART_HandleTypeDef *pHuartTX;
-	osMessageQueueId_t queueRX;
+	UART_HandleTypeDef 	*pHuartRX;
+	UART_HandleTypeDef 	*pHuartTX;
+	osMessageQueueId_t 	queueRX;
+	osSemaphoreId_t		sem;
 	//osMessageQueueId_t qHandleTX;
 
 	if ((uint8_t)u8_uartNum == 2) {
+		sem = semUart2;
 		pHuartRX = &huart2;
 		queueRX = qRxUart2;
 
 		pHuartTX = &huart3;
-		//qHandleTX = qRxUart3;
-
 	}
-	else if ((uint8_t)u8_uartNum == 3)
-	{
+	else if ((uint8_t)u8_uartNum == 3) {
+		sem = semUart3;
 		pHuartRX = &huart3;
 		queueRX = qRxUart3;
 
 		pHuartTX = &huart2;
-		//qHandleTX = qRxUart2;
 	}
 	else {
 		Error_Handler();
@@ -341,6 +352,7 @@ void uartTask(void *u8_uartNum)
 
 		/* the thread unblocked and puts a byte to transfer */
 		// TODO: we need a semaphore if data transfers from ISR
+		osSemaphoreAcquire(sem, portMAX_DELAY);
 		HAL_UART_Transmit_IT(pHuartTX, &data, 1);
 
 		/* ISR will continue transfer */
