@@ -20,6 +20,8 @@
 
 UART_HandleTypeDef huart2;
 UART_HandleTypeDef huart3;
+volatile uint32_t errors_uart2 = 0;
+volatile uint32_t errors_uart3 = 0;
 
 
 typedef uint8_t data_t;
@@ -53,10 +55,10 @@ void StartDefaultTask(void *param);
 /* queues */
 osMessageQueueId_t qRxUart3;
 osMessageQueueId_t qRxUart2;
-#define QUEUE_MAX_SIZE 128
+#define QUEUE_MAX_SIZE 		128
 
-osSemaphoreId_t semUart3;
-osSemaphoreId_t semUart2;
+osSemaphoreId_t semUart3tx;
+osSemaphoreId_t semUart2tx;
 
 
 
@@ -88,8 +90,8 @@ int main(void)
   osKernelInitialize();
 
   //init queues capacity=QUEUE_MAX_SIZE, size of element = 1or2 byte;
-  semUart2 = osSemaphoreNew(1,1,NULL);
-  semUart3 = osSemaphoreNew(1,1,NULL);
+  semUart2tx = osSemaphoreNew(1,1,NULL);
+  semUart3tx = osSemaphoreNew(1,1,NULL);
   qRxUart2 = osMessageQueueNew(QUEUE_MAX_SIZE, sizeof(data_t), NULL);
   qRxUart3 = osMessageQueueNew(QUEUE_MAX_SIZE, sizeof(data_t), NULL);
 
@@ -229,8 +231,8 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	 * by decrementing data ptr in huart instance; This code should be
 	 * safe, because HAL_UART_RxCpltCallback() calls only in ISR  */
 
-	//TODO: 9 byte transfer support
-	data_t data = *(huart->pRxBuffPtr-1);
+	//TODO: 9 byte transfer support at this point
+	data_t data = *(data_t*)(huart->pRxBuffPtr-sizeof(data));
 	osMessageQueueId_t qHandle;
 
 	if (huart->Instance == USART3) {
@@ -239,8 +241,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	else if  (huart->Instance == USART2) {
 		qHandle = qRxUart2;
 	}
-	else {
-		Error_Handler();
+
+
+	if(huart->ErrorCode) {
+		data = huart->ErrorCode;
 	}
 
 
@@ -255,42 +259,46 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
 	HAL_UART_Receive_IT(huart, &data, 1);
 }
 
+
 /** It will be called in the end of UART ISR, after transmitting 1 byte */
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart){
-	osMessageQueueId_t 	qHandle;
+#if 1
+
+//	osMessageQueueId_t 	qHandle;
 	osSemaphoreId_t 	sem;
 
-	// TODO: optimize it!!!
-	static data_t data[QUEUE_MAX_SIZE]; //copy data from queue to this array for TX
 
-	uint32_t size;
+	//uint32_t size;
 
+	//uart3 worries about RX3 queue and TX2 resource
 	if (huart->Instance == USART3) {
-		qHandle = qRxUart2;
-		sem = semUart3;
+		sem = semUart3tx;
 	}
 	else if  (huart->Instance == USART2) {
-		qHandle = qRxUart3;
-		sem = semUart2;
+		sem = semUart2tx;
 	}
 	else {
 		Error_Handler();
 	}
 
-//	size = osMessageQueueGetCount(qHandle);
-//
-//	for (int i=0; i<size; i++) {
-//		osMessageQueuePut(qHandle, &data[i],0,0);
-//	}
-//
-//
+
+	osSemaphoreRelease(sem);
 //	/* In this callback an old transmission was
 //	 * completed yet, so we can start a new
 //	 * transmission. HAL_UART_Transmit_IT() checks
 //	 * for size and just will return if size==0  */
-//	HAL_UART_Transmit_IT(huart, &data, size);
-//	if (huart->gState == HAL_UART_STATE_READY)
-		osSemaphoreRelease(sem);
+#endif
+
+}
+
+void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart) {
+	static uint32_t errors_UART2=0;
+	static uint32_t errors_UART3=0;
+
+	if (huart->Instance == USART3)
+		errors_UART3++;
+	else
+		errors_UART2++;
 }
 
 
@@ -316,7 +324,7 @@ void StartDefaultTask(void *param) {
   */
 void uartTask(void *u8_uartNum)
 {
-	uint8_t msg[] = "uart3Task is running\n";
+	//uint8_t msg[] = "uart3Task is running\n";
 	data_t data;
 	data_t data_arr[QUEUE_MAX_SIZE];
 	uint32_t size;
@@ -327,19 +335,22 @@ void uartTask(void *u8_uartNum)
 	osSemaphoreId_t		sem;
 	//osMessageQueueId_t qHandleTX;
 
+	//uart2 worry about RX2 and TX3
 	if ((uint8_t)u8_uartNum == 2) {
-		sem = semUart2;
+		sem = semUart3tx;
 		pHuartRX = &huart2;
 		queueRX = qRxUart2;
 
 		pHuartTX = &huart3;
 	}
 	else if ((uint8_t)u8_uartNum == 3) {
-		sem = semUart3;
+		//uart3 worry about RX3 and TX2
 		pHuartRX = &huart3;
 		queueRX = qRxUart3;
 
 		pHuartTX = &huart2;
+		sem = semUart2tx;
+
 	}
 	else {
 		Error_Handler();
@@ -358,13 +369,13 @@ void uartTask(void *u8_uartNum)
 		//osSemaphoreAcquire(sem, portMAX_DELAY);
 		size = 1;
 		size += osMessageQueueGetCount(queueRX);
+
 		for (int i=1; i<size; i++) {
-			osMessageQueueGet(queueRX, &data_arr[i],0,0);
+			osMessageQueueGet(queueRX, &data_arr[i], 0, portMAX_DELAY);
 		}
 
-
-
 		HAL_UART_Transmit_IT(pHuartTX, data_arr, size);
+		osSemaphoreAcquire(sem, portMAX_DELAY);
 
 		/* ISR will continue transfer */
 	}
